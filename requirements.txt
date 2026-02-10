@@ -1,1 +1,1 @@
-streamlit,pandas,numpy
+streamlit
