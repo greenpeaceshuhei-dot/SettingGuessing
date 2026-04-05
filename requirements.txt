@@ -1,1 +1,2 @@
 streamlit
+streamlit-local-storage
