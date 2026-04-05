@@ -2,6 +2,9 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import json
+from streamlit_local_storage import LocalStorage
+
+local_storage = LocalStorage()
 
 st.set_page_config(page_title="パチスロ設定推測アプリ", layout="wide", initial_sidebar_state="expanded")
 
@@ -86,42 +89,53 @@ def get_prior_distribution(evaluation_level):
 # ==========================================
 st.sidebar.title("⚙️ 設定管理と推測要素")
 
-# 1. JSONファイルの読み込み（一番上）
-st.sidebar.header("📁 機種データ(JSON)の読み込み")
-uploaded_file = st.sidebar.file_uploader("JSONファイルを選択して状態を復元", type="json")
-if uploaded_file is not None:
-    file_content = uploaded_file.getvalue()
-    # 同じファイルが再読込ループになるのを防ぐ
-    if st.session_state.get('last_uploaded') != file_content:
-        st.session_state['last_uploaded'] = file_content
-        try:
-            data = json.loads(file_content.decode('utf-8'))
-            for k, v in data.items():
-                if k in st.session_state:
-                    st.session_state[k] = v
-            # 読み込み時は計算結果を一旦リセットする
-            st.session_state.result_df = None
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error("読み込みに失敗しました。")
+# 1. 現在のデータの保存 (Local Storage)
+st.sidebar.header("💾 現在の状態をブラウザに保存")
+st.sidebar.text_input("機種名 (保存名)", key="model_name", placeholder="例：マイジャグラーV")
 
-# 2. 現在のデータの保存
+if st.sidebar.button("この機種の設定を保存", type="primary", use_container_width=True):
+    model_name = st.session_state.model_name
+    if model_name:
+        export_data = {k: st.session_state[k] for k in export_keys if k in st.session_state}
+        local_storage.setItem(model_name, export_data)
+        st.sidebar.success(f"「{model_name}」をブラウザに保存しました！")
+    else:
+        st.sidebar.error("機種名を入力してください。")
+
 st.sidebar.markdown("---")
-st.sidebar.header("💾 現在の状態を保存")
-st.sidebar.text_input("機種名 (ファイル名用)", key="model_name", placeholder="例：マイジャグラーV")
-model_name = st.session_state.model_name
-file_name = f"{model_name}.json" if model_name else "パチスロ設定データ.json"
 
-export_data = {k: st.session_state[k] for k in export_keys if k in st.session_state}
-json_string = json.dumps(export_data, ensure_ascii=False, indent=2)
+# 2. データの読み込み・削除
+st.sidebar.header("📁 保存済みデータの管理")
+# local_storage.getAll() でブラウザ内の全データを取得
+all_items = local_storage.getAll()
 
-st.sidebar.download_button(
-    label="現在の設定とカウントを保存",
-    data=json_string,
-    file_name=file_name,
-    mime="application/json",
-    use_container_width=True
-)
+if all_items and isinstance(all_items, dict) and len(all_items) > 0:
+    saved_models = list(all_items.keys())
+    selected_model = st.sidebar.selectbox("保存済み機種を選択", options=[""] + saved_models)
+    
+    col_load, col_del = st.sidebar.columns(2)
+    with col_load:
+        if st.button("読み込む", use_container_width=True):
+            if selected_model:
+                data = local_storage.getItem(selected_model)
+                if data:
+                    for k, v in data.items():
+                        if k in st.session_state:
+                            st.session_state[k] = v
+                    st.session_state.result_df = None
+                    st.rerun()
+            else:
+                st.sidebar.warning("機種を選択してください")
+    with col_del:
+        if st.button("削除する", use_container_width=True):
+            if selected_model:
+                local_storage.deleteItem(selected_model)
+                st.sidebar.success(f"「{selected_model}」を削除しました")
+                st.rerun()
+            else:
+                st.sidebar.warning("機種を選択してください")
+else:
+    st.sidebar.info("保存されたデータはありません。")
 
 st.sidebar.markdown("---")
 
