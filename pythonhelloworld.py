@@ -4,6 +4,9 @@ import pandas as pd
 import json
 from streamlit_local_storage import LocalStorage
 
+if "storage_init" not in st.session_state:
+    st.session_state["storage_init"] = False
+
 local_storage = LocalStorage()
 
 st.set_page_config(page_title="パチスロ設定推測アプリ", layout="wide", initial_sidebar_state="expanded")
@@ -93,8 +96,10 @@ st.sidebar.title("⚙️ 設定管理と推測要素")
 st.sidebar.header("💾 現在の状態をブラウザに保存")
 st.sidebar.text_input("機種名 (保存名)", key="model_name", placeholder="例：マイジャグラーV")
 
+# model_nameを変数として定義（ここを修正しました）
+model_name = st.session_state.model_name
+
 if st.sidebar.button("この機種の設定を保存", type="primary", use_container_width=True):
-    model_name = st.session_state.model_name
     if model_name:
         export_data = {k: st.session_state[k] for k in export_keys if k in st.session_state}
         local_storage.setItem(model_name, export_data)
