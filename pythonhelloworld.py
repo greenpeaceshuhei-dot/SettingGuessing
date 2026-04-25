@@ -1,15 +1,76 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import json
-from streamlit_local_storage import LocalStorage
 
-if "storage_init" not in st.session_state:
-    st.session_state["storage_init"] = False
+# ==========================================
+# 🔧 【設定エリア】機種の理論値をハードコーディング
+# ==========================================
+# ここを書き換えるだけで、別の機種のアプリが作れます。
 
-local_storage = LocalStorage()
+MACHINE_NAME = "カバネリ海門"
 
-st.set_page_config(page_title="パチスロ設定推測アプリ", layout="wide", initial_sidebar_state="expanded")
+# 推測要素のリスト
+# "type" を "koyaku" (ゲーム数参照) か "furiwake" (回数振り分け) のどちらかにします。
+ELEMENTS = [
+    {
+        "type": "koyaku",
+        "name": "kyotuberu",
+        "probs": [121.1, 114.4, 112.8, 106.2, 104.2, 99.1]  # 設定1〜6の分母(1/X)
+    },
+
+    {
+        "type": "furiwake",
+        "name": "ボーナス終了画面",
+        "items": [
+            {"name": "デフォルト", "probs": [97.7, 97.7, 97.7, 95, 93, 86.8]}, # 設定1〜6の振り分け(%)
+            {"name": "高設定示唆", "probs": [2.3, 2.3, 2.3, 5, 7, 10]},
+            {"name": "設定6確定",  "probs": [ 0,  0,  0, 0, 0, 3.2]}
+        ]
+    },
+
+    {
+        "type": "furiwake",
+        "name": "ボイス",
+        "items": [
+            {"name": "男性", "probs": [50, 37.35, 50, 37, 47, 34.3]}, # 設定1〜6の振り分け(%)
+            {"name": "女性", "probs": [37.65, 50, 37.35, 47, 35.55, 47]}, # 設定1〜6の振り分け(%)
+            {"name": "高設定示唆弱", "probs": [11, 11, 11, 14, 15, 16]},
+            {"name": "高設定示唆中", "probs": [1.3, 1.3, 1.3, 1.6, 1.8, 2]},
+            {"name": "高設定示唆今日", "probs": [0.05, 0.05, 0.05, 0.1, 0.15, 0.2]},
+            {"name": "設定2以上",  "probs": [ 0, 0.3, 0.3, 0.3, 0.3, 0.3]},
+            {"name": "設定6確定",  "probs": [ 0, 0, 0, 0, 0.2, 0.2]}
+        ]
+    },
+
+    {
+        "type": "furiwake",
+        "name": "駿城単チャメ",
+        "items": [
+            {"name": "1000Pts", "probs": [98.8, 98, 98, 98, 98, 97.7]}, # 設定1〜6の振り分け(%)
+            {"name": "3000Pts", "probs": [1.2, 2, 2, 2, 2, 2.3]}
+        ]
+    },
+
+    {
+        "type": "koyaku",
+        "name": "単独REG",
+        "probs": [504, 483, 461, 399, 368, 334]
+     }
+    # {
+    #     "type": "furiwake",
+    #     "name": "ボーナス終了画面 (サンプル)",
+    #     "items": [
+    #         {"name": "デフォルト", "probs": [80, 80, 80, 50, 50, 50]}, # 設定1〜6の振り分け(%)
+    #         {"name": "高設定示唆", "probs": [15, 15, 15, 30, 30, 30]},
+    #         {"name": "設定6確定",  "probs": [ 5,  5,  5, 20, 20, 20]}
+    #     ]
+    # }
+]
+
+# ==========================================
+
+
+st.set_page_config(page_title=f"設定推測：{MACHINE_NAME}", layout="wide")
 
 # --- カスタムCSS（数値入力欄の+-ボタン非表示） ---
 st.markdown("""
@@ -34,46 +95,30 @@ def sub_val(key, val):
 
 def reset_counts():
     """現在のカウントとゲーム数だけを0にリセットする"""
-    st.session_state.input_total_games = 0
-    for i in range(1, 4):
-        st.session_state[f'input_p1_{i}'] = 0
-        for j in range(1, 21):
-            st.session_state[f'input_p2_{i}_{j}'] = 0
+    st.session_state.total_games = 0
+    for i, elem in enumerate(ELEMENTS):
+        if elem["type"] == "koyaku":
+            st.session_state[f"count_koyaku_{i}"] = 0
+        elif elem["type"] == "furiwake":
+            for j in range(len(elem["items"])):
+                st.session_state[f"count_furiwake_{i}_{j}"] = 0
     st.session_state.result_df = None
 
 # --- セッションステートの初期化 ---
-def init_state(key, default):
-    if key not in st.session_state:
-        st.session_state[key] = default
+if "total_games" not in st.session_state:
+    st.session_state.total_games = 0
+if "result_df" not in st.session_state:
+    st.session_state.result_df = None
 
-init_state('model_name', "")
-init_state('eval_level', 3)
-init_state('input_total_games', 0)
-init_state('result_df', None)
+for i, elem in enumerate(ELEMENTS):
+    if elem["type"] == "koyaku":
+        if f"count_koyaku_{i}" not in st.session_state:
+            st.session_state[f"count_koyaku_{i}"] = 0
+    elif elem["type"] == "furiwake":
+        for j in range(len(elem["items"])):
+            if f"count_furiwake_{i}_{j}" not in st.session_state:
+                st.session_state[f"count_furiwake_{i}_{j}"] = 0
 
-for i in range(1, 4):
-    init_state(f'name_e{i}', f"要素{i}")
-    init_state(f'type_e{i}', "パターン①：小役とゲーム数")
-    init_state(f'num_items_e{i}', 2)
-    init_state(f'input_p1_{i}', 0)
-    for s in range(1, 7):
-        init_state(f'p1_e{i}_s{s}', 100.0)
-    for j in range(1, 21):
-        init_state(f'p2_e{i}_name{j}', f"項目{j}")
-        init_state(f'input_p2_{i}_{j}', 0)
-        for s in range(1, 7):
-            init_state(f'p2_e{i}_item{j}_s{s}', 25.0)
-
-# --- エクスポート用キーの定義 ---
-export_keys = ['model_name', 'eval_level', 'input_total_games']
-for i in range(1, 4):
-    export_keys.extend([f'name_e{i}', f'type_e{i}', f'num_items_e{i}', f'input_p1_{i}'])
-    for s in range(1, 7):
-        export_keys.append(f'p1_e{i}_s{s}')
-    for j in range(1, 21):
-        export_keys.extend([f'p2_e{i}_name{j}', f'input_p2_{i}_{j}'])
-        for s in range(1, 7):
-            export_keys.append(f'p2_e{i}_item{j}_s{s}')
 
 # --- 関数：事前確率（環境要因）の計算 ---
 def get_prior_distribution(evaluation_level):
@@ -87,104 +132,17 @@ def get_prior_distribution(evaluation_level):
     prior[3:6] = p_high * ratio_high
     return prior
 
-# ==========================================
-# サイドバー構築
-# ==========================================
-st.sidebar.title("⚙️ 設定管理と推測要素")
-
-# 1. 現在のデータの保存 (Local Storage)
-st.sidebar.header("💾 現在の状態をブラウザに保存")
-st.sidebar.text_input("機種名 (保存名)", key="model_name", placeholder="例：マイジャグラーV")
-
-# model_nameを変数として定義（ここを修正しました）
-model_name = st.session_state.model_name
-
-if st.sidebar.button("この機種の設定を保存", type="primary", use_container_width=True):
-    if model_name:
-        export_data = {k: st.session_state[k] for k in export_keys if k in st.session_state}
-        local_storage.setItem(model_name, export_data)
-        st.sidebar.success(f"「{model_name}」をブラウザに保存しました！")
-    else:
-        st.sidebar.error("機種名を入力してください。")
-
-st.sidebar.markdown("---")
-
-# 2. データの読み込み・削除
-st.sidebar.header("📁 保存済みデータの管理")
-# local_storage.getAll() でブラウザ内の全データを取得
-all_items = local_storage.getAll()
-
-if all_items and isinstance(all_items, dict) and len(all_items) > 0:
-    saved_models = list(all_items.keys())
-    selected_model = st.sidebar.selectbox("保存済み機種を選択", options=[""] + saved_models)
-    
-    col_load, col_del = st.sidebar.columns(2)
-    with col_load:
-        if st.button("読み込む", use_container_width=True):
-            if selected_model:
-                data = local_storage.getItem(selected_model)
-                if data:
-                    for k, v in data.items():
-                        if k in st.session_state:
-                            st.session_state[k] = v
-                    st.session_state.result_df = None
-                    st.rerun()
-            else:
-                st.sidebar.warning("機種を選択してください")
-    with col_del:
-        if st.button("削除する", use_container_width=True):
-            if selected_model:
-                local_storage.deleteItem(selected_model)
-                st.sidebar.success(f"「{selected_model}」を削除しました")
-                st.rerun()
-            else:
-                st.sidebar.warning("機種を選択してください")
-else:
-    st.sidebar.info("保存されたデータはありません。")
-
-st.sidebar.markdown("---")
-
-# 3. 推測要素の詳細設定
-st.sidebar.header("🔧 推測要素の各種設定")
-for i in range(1, 4):
-    with st.sidebar.expander(f"推測要素 {i}", expanded=(i==1)):
-        st.text_input(f"要素{i}の名称", key=f"name_e{i}")
-        e_type = st.radio(
-            "カウントのタイプ", 
-            ["パターン①：小役とゲーム数", "パターン②：抽選結果（振り分け）"], 
-            key=f"type_e{i}"
-        )
-        
-        if "パターン①" in e_type:
-            st.caption("各設定の確率を分母(1/X)で入力してください。")
-            for s in range(1, 7):
-                st.number_input(f"設定{s}の分母", min_value=0.0, step=1.0, key=f"p1_e{i}_s{s}")
-        else:
-            st.caption("項目ごとの振り分け(%)を入力。（最大20項目）")
-            num_items = st.selectbox("項目の数", list(range(2, 21)), key=f"num_items_e{i}")
-            for j in range(1, num_items + 1):
-                st.markdown(f"**項目 {j}**")
-                st.text_input("名称", key=f"p2_e{i}_name{j}")
-                col_a, col_b = st.columns(2)
-                for s in range(1, 7):
-                    target_col = col_a if s <= 3 else col_b
-                    with target_col:
-                        st.number_input(f"設定{s}(%)", min_value=0.0, max_value=100.0, step=1.0, key=f"p2_e{i}_item{j}_s{s}")
-
 
 # ==========================================
 # メイン画面構築
 # ==========================================
-if model_name:
-    st.title(f"🎰 パチスロ設定推測：{model_name}")
-else:
-    st.title("🎰 パチスロ設定推測アプリ")
+st.title(f"🎰 パチスロ設定推測：{MACHINE_NAME}")
 
 # 1. 周りの台の状況
 st.header("1. 周りの台の状況（環境要因）")
 eval_level = st.slider(
     "周りの台の状況を5段階で評価してください（1:最悪 〜 5:最高）", 
-    min_value=1, max_value=5, step=1, key="eval_level"
+    min_value=1, max_value=5, value=3, step=1, key="eval_level"
 )
 confidences_str = {1: "10%", 2: "27.5%", 3: "45%", 4: "62.5%", 5: "80%"}
 st.info(f"現在の高設定(4,5,6)の自信度: **{confidences_str[eval_level]}**")
@@ -203,50 +161,48 @@ st.markdown("---")
 
 # 共通ゲーム数入力
 st.markdown("##### 共通ゲーム数")
-st.number_input("共通ゲーム数", min_value=0, key="input_total_games", label_visibility="collapsed")
+st.number_input("共通ゲーム数", min_value=0, key="total_games", label_visibility="collapsed")
 col_g1, col_g2, col_g3 = st.columns(3)
 with col_g1:
-    st.button("+10", use_container_width=True, on_click=add_val, args=("input_total_games", 10))
+    st.button("+10", use_container_width=True, on_click=add_val, args=("total_games", 10))
 with col_g2:
-    st.button("+100", use_container_width=True, on_click=add_val, args=("input_total_games", 100))
+    st.button("+100", use_container_width=True, on_click=add_val, args=("total_games", 100))
 with col_g3:
-    st.button("+1000", use_container_width=True, on_click=add_val, args=("input_total_games", 1000))
+    st.button("+1000", use_container_width=True, on_click=add_val, args=("total_games", 1000))
 
 st.markdown("---")
 
-# 各要素のカウントUI (全て縦に並べる)
-for i in range(1, 4):
-    name_val = st.session_state[f'name_e{i}']
-    st.subheader(f"■ {name_val}")
+# 各要素のカウントUI (設定エリアのリストに基づいて自動生成)
+for i, elem in enumerate(ELEMENTS):
+    st.subheader(f"■ {elem['name']}")
     
-    if "パターン①" in st.session_state[f'type_e{i}']:
-        st.caption("共通ゲーム数を参照します")
-        count_key = f'input_p1_{i}'
+    if elem["type"] == "koyaku":
+        st.caption(f"共通ゲーム数を参照します (理論値: 設定1=1/{elem['probs'][0]} 〜 設定6=1/{elem['probs'][5]})")
+        count_key = f"count_koyaku_{i}"
         
         st.number_input("カウント", min_value=0, key=count_key, label_visibility="collapsed")
         c1, c2 = st.columns(2)
         with c1:
-            st.button("-1", key=f"btn_m_p1_{i}", use_container_width=True, on_click=sub_val, args=(count_key, 1))
+            st.button("-1", key=f"btn_m_k_{i}", use_container_width=True, on_click=sub_val, args=(count_key, 1))
         with c2:
-            st.button("+1", key=f"btn_p_p1_{i}", type="primary", use_container_width=True, on_click=add_val, args=(count_key, 1))
+            st.button("+1", key=f"btn_p_k_{i}", type="primary", use_container_width=True, on_click=add_val, args=(count_key, 1))
 
-    else:
+    elif elem["type"] == "furiwake":
         st.caption("各項目の発生回数をカウントします")
-        num_items = st.session_state[f'num_items_e{i}']
         
-        for j in range(1, num_items + 1):
-            item_name = st.session_state[f'p2_e{i}_name{j}']
-            count_key = f'input_p2_{i}_{j}'
+        for j, item in enumerate(elem["items"]):
+            count_key = f"count_furiwake_{i}_{j}"
             
-            st.markdown(f"**{item_name}**")
+            st.markdown(f"**{item['name']}**")
             st.number_input("回数", min_value=0, key=count_key, label_visibility="collapsed")
             c1, c2 = st.columns(2)
             with c1:
-                st.button("-1", key=f"btn_m_p2_{i}_{j}", use_container_width=True, on_click=sub_val, args=(count_key, 1))
+                st.button("-1", key=f"btn_m_f_{i}_{j}", use_container_width=True, on_click=sub_val, args=(count_key, 1))
             with c2:
-                st.button("+1", key=f"btn_p_p2_{i}_{j}", type="primary", use_container_width=True, on_click=add_val, args=(count_key, 1))
+                st.button("+1", key=f"btn_p_f_{i}_{j}", type="primary", use_container_width=True, on_click=add_val, args=(count_key, 1))
                 
     st.markdown("---")
+
 
 # ==========================================
 # 3. 推測結果の計算と表示
@@ -254,37 +210,38 @@ for i in range(1, 4):
 if st.button("🔄 設定推測を計算・更新する", type="primary", use_container_width=True):
     log_likelihood_total = np.zeros(6)
     
-    for i in range(1, 4):
-        if "パターン①" in st.session_state[f'type_e{i}']:
-            k = st.session_state[f'input_p1_{i}']
-            n = st.session_state.input_total_games
-            probs_denom = [st.session_state[f'p1_e{i}_s{s}'] for s in range(1, 7)]
-            probs = np.array([1.0 / val if val > 0 else 0 for val in probs_denom])
+    # 尤度計算もリストに基づいて自動処理
+    for i, elem in enumerate(ELEMENTS):
+        if elem["type"] == "koyaku":
+            k = st.session_state[f"count_koyaku_{i}"]
+            n = st.session_state.total_games
+            probs = np.array([1.0 / val if val > 0 else 0 for val in elem["probs"]])
             
             if n >= k and n > 0:
                 epsilon = 1e-10
                 p_safe = np.clip(probs, epsilon, 1 - epsilon)
                 ll = k * np.log(p_safe) + (n - k) * np.log(1 - p_safe)
                 log_likelihood_total += ll
-        else:
-            num_items = st.session_state[f'num_items_e{i}']
+                
+        elif elem["type"] == "furiwake":
             total_k = 0
             k_list = []
             p_list = []
-            for j in range(1, num_items + 1):
-                count_key = f'input_p2_{i}_{j}'
-                k_list.append(st.session_state[count_key])
-                p_list.append([st.session_state[f'p2_e{i}_item{j}_s{s}'] / 100.0 for s in range(1, 7)])
-                total_k += st.session_state[count_key]
+            for j, item in enumerate(elem["items"]):
+                k_val = st.session_state[f"count_furiwake_{i}_{j}"]
+                k_list.append(k_val)
+                p_list.append([p / 100.0 for p in item["probs"]])
+                total_k += k_val
                 
             if total_k > 0:
                 epsilon = 1e-10
-                for j in range(num_items):
+                for j in range(len(elem["items"])):
                     k_val = k_list[j]
                     p_safe = np.clip(p_list[j], epsilon, 1.0)
                     ll = k_val * np.log(p_safe)
                     log_likelihood_total += ll
 
+    # ベイズの定理による事後確率の計算
     max_ll = np.max(log_likelihood_total)
     likelihood_scaled = np.exp(log_likelihood_total - max_ll)
     unnormalized_posterior = likelihood_scaled * prior_prob
@@ -299,6 +256,7 @@ if st.button("🔄 設定推測を計算・更新する", type="primary", use_co
         "設定": settings,
         "確率(%)": posterior_prob * 100
     })
+
 
 if st.session_state.result_df is not None:
     st.header("3. 設定推測結果")
