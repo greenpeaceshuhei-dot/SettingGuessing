@@ -14,7 +14,7 @@ MACHINE_NAME = "カバネリ海門"
 ELEMENTS = [
     {
         "type": "koyaku",
-        "name": "kyotuberu",
+        "name": "共通ベル",
         "probs": [121.1, 114.4, 112.8, 106.2, 104.2, 99.1]  # 設定1〜6の分母(1/X)
     },
 
@@ -52,10 +52,13 @@ ELEMENTS = [
     },
 
     {
-        "type": "koyaku",
-        "name": "単独REG",
-        "probs": [504, 483, 461, 399, 368, 334]
-     }
+        "type": "furiwake",
+        "name": "単チャメ発光",
+        "items": [
+            {"name": "非発光", "probs": [12, 12, 12, 16, 17, 18]}, # 設定1〜6の振り分け(%)
+            {"name": "発光", "probs": [88, 88, 88, 84, 83, 82]}
+        ]
+    }
     # {
     #     "type": "furiwake",
     #     "name": "ボーナス終了画面 (サンプル)",
