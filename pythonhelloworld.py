@@ -136,13 +136,12 @@ def get_prior_distribution(evaluation_level):
     confidences = {1: 0.10, 2: 0.275, 3: 0.450, 4: 0.625, 5: 0.80}
     p_high = confidences[evaluation_level]
     p_low = 1.0 - p_high
-    ratio_low = np.array([0.50, 0.30, 0.20])
-    ratio_high = np.array([0.30, 0.30, 0.40])
+    ratio_low = np.array([0.60, 0.40, 0])
+    ratio_high = np.array([0.60, 0.25, 0.15])
     prior = np.zeros(6)
     prior[0:3] = p_low * ratio_low
     prior[3:6] = p_high * ratio_high
     return prior
-
 
 # ==========================================
 # メイン画面構築
