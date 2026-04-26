@@ -133,7 +133,7 @@ for i, elem in enumerate(ELEMENTS):
 
 # --- 関数：事前確率（環境要因）の計算 ---
 def get_prior_distribution(evaluation_level):
-    confidences = {1: 0.10, 2: 0.275, 3: 0.450, 4: 0.625, 5: 0.80}
+    confidences = {1: 0.10, 2: 0.25, 3: 0.50, 4: 0.65, 5: 0.80}
     p_high = confidences[evaluation_level]
     p_low = 1.0 - p_high
     ratio_low = np.array([0.60, 0.40, 0])
@@ -154,7 +154,7 @@ eval_level = st.slider(
     "周りの台の状況を5段階で評価してください（1:最悪 〜 5:最高）", 
     min_value=1, max_value=5, value=3, step=1, key="eval_level"
 )
-confidences_str = {1: "10%", 2: "27.5%", 3: "45%", 4: "62.5%", 5: "80%"}
+confidences_str = {1: "10%", 2: "25%", 3: "50%", 4: "65%", 5: "80%"}
 st.info(f"現在の高設定(4,5,6)の自信度: **{confidences_str[eval_level]}**")
 prior_prob = get_prior_distribution(eval_level)
 
